@@ -12,6 +12,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install host dependencies
+        run: sudo apt-get update && sudo apt-get install -y bison texinfo autoconf automake libtool
+
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
         with:
@@ -45,26 +48,23 @@ jobs:
           export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
           export STRIP=$TOOLCHAIN/bin/llvm-strip
 
-          export CFLAGS="-fPIE -fPIC"
-          export LDFLAGS="-static"
+          export CFLAGS="-O2 -fPIE"
+          export LDFLAGS="-static -pie"
 
-          ./configure \
-            --host=$TARGET \
+          export ac_cv_func_setvbuf_reversed=no
+          export ac_cv_c_bigendian=no
+          export bash_cv_have_mbstate_t=yes
+          export bash_cv_func_sigsetjmp=present
+          export bash_cv_getcwd_malloc=yes
+          export bash_cv_job_control_missing=present
+
+          CC="${CC}" CFLAGS="-O2 -fPIE" LDFLAGS="-static -pie" ./configure \
+            --host=aarch64-linux-android \
+            --target=aarch64-linux-android \
+            --prefix=/data/data/com.custom.terminal/files/usr \
             --enable-static-link \
             --without-bash-malloc \
-            bash_cv_dev_fd=whacky \
-            bash_cv_dup2_broken=no \
-            bash_cv_pgrp_pipe=no \
-            bash_cv_type_rlimit=yes \
-            bash_cv_decl_under_sys_siglist=yes \
-            bash_cv_under_sys_siglist=yes \
-            bash_cv_sys_siglist=yes \
-            bash_cv_unusable_rtsigs=yes \
-            bash_cv_getcwd_malloc=yes \
-            bash_cv_func_sigsetjmp=present \
-            bash_cv_printf_a_format=yes \
-            bash_cv_job_control_missing=present \
-            bash_cv_sys_named_pipes=present
+            --disable-nls
 
           make -j$(nproc)
           $STRIP bash
@@ -74,10 +74,10 @@ jobs:
           mkdir -p output
           cp bash-5.2/bash output/
           cd output
-          tar -czvf bash.tar.gz bash
+          tar -czvf bash-arm64.tar.gz bash
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: droidx-bionic-bash-arm64
-          path: output/bash.tar.gz
+          path: output/bash-arm64.tar.gz
