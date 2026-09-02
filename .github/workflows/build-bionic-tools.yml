@@ -1,0 +1,83 @@
+name: Build Bionic Tools
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-bash:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27b
+
+      - name: Download and extract GNU Bash 5.2
+        run: |
+          wget https://ftp.gnu.org/gnu/bash/bash-5.2.tar.gz
+          tar -xzf bash-5.2.tar.gz
+
+      - name: Patch default PATH
+        run: |
+          cd bash-5.2
+          echo '#undef DEFAULT_PATH_VALUE' >> config-top.h
+          echo '#define DEFAULT_PATH_VALUE "/data/data/com.custom.terminal/files/usr/bin:/system/bin"' >> config-top.h
+
+      - name: Configure and Build
+        run: |
+          cd bash-5.2
+
+          # NDK setup for cross compilation
+          export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
+          export TARGET=aarch64-linux-android
+          export API=34
+
+          export AR=$TOOLCHAIN/bin/llvm-ar
+          export CC=$TOOLCHAIN/bin/${TARGET}${API}-clang
+          export AS=$CC
+          export CXX=$TOOLCHAIN/bin/${TARGET}${API}-clang++
+          export LD=$TOOLCHAIN/bin/ld
+          export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+          export STRIP=$TOOLCHAIN/bin/llvm-strip
+
+          export CFLAGS="-fPIE -fPIC"
+          export LDFLAGS="-static"
+
+          ./configure \
+            --host=$TARGET \
+            --enable-static-link \
+            --without-bash-malloc \
+            bash_cv_dev_fd=whacky \
+            bash_cv_dup2_broken=no \
+            bash_cv_pgrp_pipe=no \
+            bash_cv_type_rlimit=yes \
+            bash_cv_decl_under_sys_siglist=yes \
+            bash_cv_under_sys_siglist=yes \
+            bash_cv_sys_siglist=yes \
+            bash_cv_unusable_rtsigs=yes \
+            bash_cv_getcwd_malloc=yes \
+            bash_cv_func_sigsetjmp=present \
+            bash_cv_printf_a_format=yes \
+            bash_cv_job_control_missing=present \
+            bash_cv_sys_named_pipes=present
+
+          make -j$(nproc)
+          $STRIP bash
+
+      - name: Package binary
+        run: |
+          mkdir -p output
+          cp bash-5.2/bash output/
+          cd output
+          tar -czvf bash.tar.gz bash
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: droidx-bionic-bash-arm64
+          path: output/bash.tar.gz
