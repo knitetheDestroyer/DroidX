@@ -59,8 +59,7 @@ jobs:
           export bash_cv_job_control_missing=present
           export bash_cv_strtoimax_missing=no
 
-          rm -f m4/strtoimax.m4 lib/sh/strtoimax.c
-          sed -i 's/${LIBOBJDIR}mbschr$U.o ${LIBOBJDIR}strtoimax$U.o/${LIBOBJDIR}mbschr$U.o/' lib/sh/Makefile.in
+          echo "/* empty stub */" > lib/sh/strtoimax.c
 
           CC="${CC}" CFLAGS="-O2 -fPIE" LDFLAGS="-static -pie" CC_FOR_BUILD=gcc ./configure \
             --host=aarch64-linux-android \
