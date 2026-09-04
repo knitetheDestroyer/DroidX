@@ -30,6 +30,7 @@ jobs:
           cd bash-5.2
           echo '#undef DEFAULT_PATH_VALUE' >> config-top.h
           echo '#define DEFAULT_PATH_VALUE "/data/data/com.custom.terminal/files/usr/bin:/system/bin"' >> config-top.h
+          sed -i '1i#include <unistd.h>' lib/termcap/tparam.c lib/termcap/termcap.c
 
       - name: Configure and Build
         run: |
@@ -48,7 +49,7 @@ jobs:
           export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
           export STRIP=$TOOLCHAIN/bin/llvm-strip
 
-          export CFLAGS="-O2 -fPIE"
+          export CFLAGS="-O2 -fPIE -Wno-error=implicit-function-declaration"
           export LDFLAGS="-static -pie"
 
           export ac_cv_func_setvbuf_reversed=no
@@ -60,7 +61,7 @@ jobs:
           export bash_cv_strtoimax_missing=no
           export ac_cv_func_strtoimax=yes
 
-          CC="${CC}" CFLAGS="-O2 -fPIE" LDFLAGS="-static -pie" CC_FOR_BUILD=gcc ./configure \
+          CC="${CC}" CFLAGS="-O2 -fPIE -Wno-error=implicit-function-declaration" LDFLAGS="-static -pie" CC_FOR_BUILD=gcc ./configure \
             --host=aarch64-linux-android \
             --target=aarch64-linux-android \
             --prefix=/data/data/com.custom.terminal/files/usr \
