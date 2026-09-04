@@ -167,8 +167,8 @@ jobs:
           export RANLIB=llvm-ranlib
           export STRIP=llvm-strip
 
-          export CFLAGS="-O2 -static -pie -Wl,-z,max-page-size=16384"
-          export LDFLAGS="-static -pie -Wl,-z,max-page-size=16384"
+          export CFLAGS="-O2 -fPIC"
+          export LDFLAGS="-Wl,-z,max-page-size=16384"
 
           ./autogen.sh
           ./configure \
@@ -177,8 +177,8 @@ jobs:
             --enable-static \
             --disable-shared \
             --enable-curl \
-            CFLAGS="-O2 -static -pie -Wl,-z,max-page-size=16384" \
-            LDFLAGS="-static -pie -Wl,-z,max-page-size=16384"
+            CFLAGS="-O2 -fPIC" \
+            LDFLAGS="-Wl,-z,max-page-size=16384"
 
           make -j$(nproc)
           make install
@@ -195,8 +195,8 @@ jobs:
           export RANLIB=llvm-ranlib
           export STRIP=llvm-strip
 
-          export CFLAGS="-O2 -static -pie -Wl,-z,max-page-size=16384"
-          export LDFLAGS="-static -pie -Wl,-z,max-page-size=16384 -Wl,-static"
+          export CFLAGS="-O2"
+          export LDFLAGS="-static -Wl,-z,max-page-size=16384"
 
           LIBS="-lm" ./configure \
             --host=aarch64-linux-android \
@@ -208,8 +208,8 @@ jobs:
             --disable-manual \
             --disable-ldap \
             --disable-ldaps \
-            CFLAGS="-O2 -static -pie -Wl,-z,max-page-size=16384" \
-            LDFLAGS="-static -pie -Wl,-z,max-page-size=16384 -Wl,-static"
+            CFLAGS="-O2" \
+            LDFLAGS="-static -Wl,-z,max-page-size=16384"
 
           make -j$(nproc)
           $STRIP --strip-all src/curl
