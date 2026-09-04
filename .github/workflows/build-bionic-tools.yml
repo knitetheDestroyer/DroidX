@@ -58,8 +58,7 @@ jobs:
           export bash_cv_getcwd_malloc=yes
           export bash_cv_job_control_missing=present
           export bash_cv_strtoimax_missing=no
-
-          echo "/* empty stub */" > lib/sh/strtoimax.c
+          export ac_cv_func_strtoimax=yes
 
           CC="${CC}" CFLAGS="-O2 -fPIE" LDFLAGS="-static -pie" CC_FOR_BUILD=gcc ./configure \
             --host=aarch64-linux-android \
