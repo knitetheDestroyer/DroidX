@@ -196,7 +196,7 @@ jobs:
           export STRIP=llvm-strip
 
           export CFLAGS="-O2"
-          export LDFLAGS="-static -Wl,-z,max-page-size=16384"
+          export LDFLAGS="-all-static -Wl,-z,max-page-size=16384"
 
           LIBS="-lm" ./configure \
             --host=aarch64-linux-android \
@@ -209,9 +209,9 @@ jobs:
             --disable-ldap \
             --disable-ldaps \
             CFLAGS="-O2" \
-            LDFLAGS="-static -Wl,-z,max-page-size=16384"
+            LDFLAGS="-all-static -Wl,-z,max-page-size=16384"
 
-          make -j$(nproc)
+          make curl_LDFLAGS="-all-static" -j$(nproc)
           $STRIP --strip-all src/curl
 
       - name: Package binary
@@ -220,6 +220,13 @@ jobs:
           cp curl-8.10.1/src/curl output/
           cd output
           tar -czvf curl-arm64.tar.gz curl
+
+      - name: Verify static binary
+        run: |
+          if readelf -l output/curl | grep -q INTERP; then
+            echo "Error: PT_INTERP found in binary!"
+            exit 1
+          fi
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
