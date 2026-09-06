@@ -233,3 +233,97 @@ jobs:
         with:
           name: droidx-bionic-curl-arm64
           path: output/curl-arm64.tar.gz
+
+  build-nano:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27b
+
+      - name: Download Ncursesw and Nano
+        run: |
+          wget https://ftp.gnu.org/gnu/ncurses/ncurses-6.5.tar.gz
+          tar -xzf ncurses-6.5.tar.gz
+          wget https://ftp.gnu.org/gnu/nano/nano-8.2.tar.xz
+          tar -xf nano-8.2.tar.xz
+
+      - name: Build Ncursesw
+        run: |
+          cd ncurses-6.5
+
+          export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
+          export PATH=$TOOLCHAIN/bin:$PATH
+
+          export CC=aarch64-linux-android34-clang
+          export CXX=aarch64-linux-android34-clang++
+          export AR=llvm-ar
+          export RANLIB=llvm-ranlib
+          export STRIP=llvm-strip
+
+          ./configure \
+            --host=aarch64-linux-android \
+            --prefix=$PWD/../ncurses-install \
+            --without-shared \
+            --without-debug \
+            --without-progs \
+            --without-tests \
+            --without-manpages \
+            --enable-widec \
+            --with-fallbacks=xterm,xterm-256color,vt100,linux,screen \
+            CFLAGS="-O2 -fPIC" \
+            LDFLAGS="-Wl,-z,max-page-size=16384"
+
+          make -j$(nproc)
+          make install
+
+      - name: Build Nano
+        run: |
+          cd nano-8.2
+
+          export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
+          export PATH=$TOOLCHAIN/bin:$PATH
+
+          export CC=aarch64-linux-android34-clang
+          export CXX=aarch64-linux-android34-clang++
+          export AR=llvm-ar
+          export RANLIB=llvm-ranlib
+          export STRIP=llvm-strip
+
+          ./configure \
+            --host=aarch64-linux-android \
+            --prefix=/data/data/com.custom.terminal/files/usr \
+            --enable-utf8 \
+            --disable-nls \
+            --disable-speller \
+            NCURSESW_CFLAGS="-I$PWD/../ncurses-install/include -I$PWD/../ncurses-install/include/ncursesw" \
+            NCURSESW_LIBS="-L$PWD/../ncurses-install/lib -lncursesw" \
+            CFLAGS="-O2" \
+            LDFLAGS="-static -Wl,-z,max-page-size=16384"
+
+          make -j$(nproc)
+
+      - name: Package binary and verify
+        run: |
+          export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
+          export PATH=$TOOLCHAIN/bin:$PATH
+
+          mkdir -p output
+          cp nano-8.2/src/nano output/
+
+          readelf -l output/nano | grep -q INTERP && exit 1 || true
+          readelf -l output/nano
+          llvm-strip output/nano
+
+          cd output
+          tar -czvf nano-arm64.tar.gz nano
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: droidx-bionic-nano-arm64
+          path: output/nano-arm64.tar.gz
