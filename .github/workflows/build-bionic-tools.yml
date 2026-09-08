@@ -62,8 +62,8 @@ jobs:
           make -j$(nproc) git \
             CC=aarch64-linux-android34-clang \
             AR=llvm-ar \
-            BASIC_CFLAGS="-O2 -static -fPIE -I$GITHUB_WORKSPACE/deps-install/include" \
-            BASIC_LDFLAGS="-static -Wl,-z,max-page-size=16384 -L$GITHUB_WORKSPACE/deps-install/lib" \
+            CFLAGS="-O2 -static -fPIE -I. -I$GITHUB_WORKSPACE/deps-install/include" \
+            LDFLAGS="-static -Wl,-z,max-page-size=16384 -L$GITHUB_WORKSPACE/deps-install/lib" \
             USE_LIBPCRE2=1 \
             LIBPCRE2_PATH=$GITHUB_WORKSPACE/deps-install \
             NO_REGEX=1 \
