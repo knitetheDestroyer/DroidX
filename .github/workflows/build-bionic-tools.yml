@@ -65,18 +65,7 @@ jobs:
           sed -i '/HAVE_SYNC_FILE_RANGE/d' config.mak.uname
 
           # Patch compatibility header for Android Bionic pthread cancellation omission
-          cat << 'HDR' >> git-compat-util.h
-
-#ifndef PTHREAD_CANCEL_DISABLE
-#define PTHREAD_CANCEL_DISABLE 0
-#endif
-#ifndef PTHREAD_CANCEL_ENABLE
-#define PTHREAD_CANCEL_ENABLE 1
-#endif
-#ifndef pthread_setcancelstate
-#define pthread_setcancelstate(s, o) (0)
-#endif
-HDR
+          printf '\n#ifndef PTHREAD_CANCEL_DISABLE\n#define PTHREAD_CANCEL_DISABLE 0\n#define PTHREAD_CANCEL_ENABLE 1\n#define pthread_setcancelstate(s, o) (0)\n#endif\n' >> git-compat-util.h
 
           # Build git binary
           make -j$(nproc) git \
