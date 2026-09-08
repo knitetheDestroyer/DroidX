@@ -6,90 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-bash:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install host build tools
-        run: sudo apt-get update && sudo apt-get install -y bison texinfo autoconf automake libtool
-
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r27b
-
-      - name: Download and extract GNU Bash 5.2
-        run: |
-          wget https://ftp.gnu.org/gnu/bash/bash-5.2.tar.gz
-          tar -xzf bash-5.2.tar.gz
-
-      - name: Patch default PATH
-        run: |
-          cd bash-5.2
-          echo '#undef DEFAULT_PATH_VALUE' >> config-top.h
-          echo '#define DEFAULT_PATH_VALUE "/data/data/com.custom.terminal/files/usr/bin:/system/bin"' >> config-top.h
-          sed -i '1i#include <unistd.h>' lib/termcap/tparam.c lib/termcap/termcap.c
-
-      - name: Configure and Build
-        run: |
-          cd bash-5.2
-
-          # NDK setup for cross compilation
-          export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
-          export TARGET=aarch64-linux-android
-          export API=34
-
-          export AR=$TOOLCHAIN/bin/llvm-ar
-          export CC=$TOOLCHAIN/bin/${TARGET}${API}-clang
-          export AS=$CC
-          export CXX=$TOOLCHAIN/bin/${TARGET}${API}-clang++
-          export LD=$TOOLCHAIN/bin/ld
-          export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
-          export STRIP=$TOOLCHAIN/bin/llvm-strip
-
-          export CFLAGS="-O2 -fPIE -Wno-error=implicit-function-declaration"
-          export LDFLAGS="-static -pie"
-
-          export ac_cv_func_setvbuf_reversed=no
-          export ac_cv_c_bigendian=no
-          export bash_cv_have_mbstate_t=yes
-          export bash_cv_func_sigsetjmp=present
-          export bash_cv_getcwd_malloc=yes
-          export bash_cv_job_control_missing=present
-          export bash_cv_func_strtoimax=no
-          export bash_cv_strtoimax_missing=no
-
-          # Fix GNU Bash 5.2 inverted strtoimax macro bug and stub out duplicate implementation
-          sed -i 's/if test \$bash_cv_func_strtoimax = yes/if test \$bash_cv_func_strtoimax = no/' configure
-          echo "/* empty stub: using Bionic libc strtoimax */" > lib/sh/strtoimax.c
-
-          CC="${CC}" CFLAGS="-O2 -fPIE -Wno-error=implicit-function-declaration" LDFLAGS="-static -pie" CC_FOR_BUILD=gcc ./configure \
-            --host=aarch64-linux-android \
-            --target=aarch64-linux-android \
-            --prefix=/data/data/com.custom.terminal/files/usr \
-            --enable-static-link \
-            --without-bash-malloc \
-            --disable-nls
-
-          make CC_FOR_BUILD=gcc -j$(nproc)
-          $STRIP --strip-all bash
-
-      - name: Package binary
-        run: |
-          mkdir -p output
-          cp bash-5.2/bash output/
-          cd output
-          tar -czvf bash-arm64.tar.gz bash
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: droidx-bionic-bash-arm64
-          path: output/bash-arm64.tar.gz
-
-  build-toybox:
+  build-git:
+    name: Build Pure Static Git 2.47.1 (ARM64)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -100,230 +18,84 @@ jobs:
         with:
           ndk-version: r27b
 
-      - name: Clone Toybox
-        run: git clone https://github.com/landley/toybox.git
-
-      - name: Build Toybox
+      - name: Download zlib, PCRE2, and Git
         run: |
-          cd toybox
+          wget -q https://zlib.net/zlib-1.3.1.tar.gz || wget -q https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+          tar -xzf zlib-1.3.1.tar.gz
+          wget -q https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.44/pcre2-10.44.tar.bz2
+          tar -xjf pcre2-10.44.tar.bz2
+          wget -q https://mirrors.edge.kernel.org/pub/software/scm/git/git-2.47.1.tar.xz
+          tar -xf git-2.47.1.tar.xz
 
-          # NDK setup for cross compilation
+      - name: Build Static zlib
+        run: |
+          cd zlib-1.3.1
           export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
           export PATH=$TOOLCHAIN/bin:$PATH
-
-          export CC=aarch64-linux-android34-clang
-          export CFLAGS="-O2 -static -pie -Wl,-z,max-page-size=16384 -Wno-error=implicit-function-declaration"
-          export LDFLAGS="-static -pie -Wl,-z,max-page-size=16384"
-          export STRIP=llvm-strip
-
-          make defconfig
-          sed -i -E "s/CONFIG_(SU|LOGIN|PASSWD|SULOGIN|CHSH|MKPASSWD)=y/# CONFIG_\1 is not set/" .config
-          make -j$(nproc)
-          $STRIP --strip-all toybox
-
-      - name: Package binary
-        run: |
-          mkdir -p output
-          cp toybox/toybox output/
-          cd output
-          tar -czvf toybox-arm64.tar.gz toybox
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: droidx-bionic-toybox-arm64
-          path: output/toybox-arm64.tar.gz
-
-  build-curl:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install host build tools
-        run: sudo apt-get update && sudo apt-get install -y autoconf automake libtool
-
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r27b
-
-      - name: Download wolfSSL and Curl
-        run: |
-          wget https://github.com/wolfSSL/wolfssl/archive/refs/tags/v5.7.2-stable.tar.gz -O wolfssl-5.7.2.tar.gz
-          tar -xzf wolfssl-5.7.2.tar.gz
-          wget https://curl.se/download/curl-8.10.1.tar.gz
-          tar -xzf curl-8.10.1.tar.gz
-
-      - name: Build wolfSSL
-        run: |
-          cd wolfssl-5.7.2-stable
-
-          export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
-          export PATH=$TOOLCHAIN/bin:$PATH
-
           export CC=aarch64-linux-android34-clang
           export AR=llvm-ar
           export RANLIB=llvm-ranlib
-          export STRIP=llvm-strip
-
-          export CFLAGS="-O2 -fPIC"
-          export LDFLAGS="-Wl,-z,max-page-size=16384"
-
-          ./autogen.sh
-          ./configure \
-            --host=aarch64-linux-android \
-            --prefix=$PWD/../wolfssl-install \
-            --enable-static \
-            --disable-shared \
-            --enable-curl \
-            CFLAGS="-O2 -fPIC" \
-            LDFLAGS="-Wl,-z,max-page-size=16384"
-
+          CFLAGS="-O2 -static -fPIE -Wl,-z,max-page-size=16384" ./configure --static --prefix=$GITHUB_WORKSPACE/deps-install
           make -j$(nproc)
           make install
 
-      - name: Build Curl
+      - name: Build Static PCRE2
         run: |
-          cd curl-8.10.1
-
+          cd pcre2-10.44
           export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
           export PATH=$TOOLCHAIN/bin:$PATH
-
           export CC=aarch64-linux-android34-clang
           export AR=llvm-ar
           export RANLIB=llvm-ranlib
-          export STRIP=llvm-strip
-
-          export CFLAGS="-O2"
-          export LDFLAGS="-static -Wl,-z,max-page-size=16384"
-
-          LIBS="-lm" ./configure \
-            --host=aarch64-linux-android \
-            --prefix=/data/data/com.custom.terminal/files/usr \
-            --enable-static \
-            --disable-shared \
-            --with-wolfssl=$PWD/../wolfssl-install \
-            --without-libpsl \
-            --disable-manual \
-            --disable-ldap \
-            --disable-ldaps \
-            CFLAGS="-O2" \
+          ./configure --host=aarch64-linux-android --prefix=$GITHUB_WORKSPACE/deps-install \
+            --disable-shared --enable-static \
+            CFLAGS="-O2 -static -fPIE -Wl,-z,max-page-size=16384" \
             LDFLAGS="-static -Wl,-z,max-page-size=16384"
-
-          make curl_LDFLAGS="-all-static" -j$(nproc)
-          $STRIP --strip-all src/curl
-
-      - name: Package binary
-        run: |
-          mkdir -p output
-          cp curl-8.10.1/src/curl output/
-          cd output
-          tar -czvf curl-arm64.tar.gz curl
-
-      - name: Verify static binary
-        run: |
-          if readelf -l output/curl | grep -q INTERP; then
-            echo "Error: PT_INTERP found in binary!"
-            exit 1
-          fi
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: droidx-bionic-curl-arm64
-          path: output/curl-arm64.tar.gz
-
-  build-nano:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r27b
-
-      - name: Download Ncursesw and Nano
-        run: |
-          wget https://ftp.gnu.org/gnu/ncurses/ncurses-6.5.tar.gz
-          tar -xzf ncurses-6.5.tar.gz
-          wget https://ftp.gnu.org/gnu/nano/nano-8.2.tar.xz
-          tar -xf nano-8.2.tar.xz
-
-      - name: Build Ncursesw
-        run: |
-          cd ncurses-6.5
-
-          export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
-          export PATH=$TOOLCHAIN/bin:$PATH
-
-          export CC=aarch64-linux-android34-clang
-          export CXX=aarch64-linux-android34-clang++
-          export AR=llvm-ar
-          export RANLIB=llvm-ranlib
-          export STRIP=llvm-strip
-
-          ./configure \
-            --host=aarch64-linux-android \
-            --prefix=$PWD/../ncurses-install \
-            --without-shared \
-            --without-debug \
-            --without-progs \
-            --without-tests \
-            --without-manpages \
-            --enable-widec \
-            --with-fallbacks=xterm,xterm-256color,vt100,linux,screen \
-            CFLAGS="-O2 -fPIC" \
-            LDFLAGS="-Wl,-z,max-page-size=16384"
-
           make -j$(nproc)
           make install
 
-      - name: Build Nano
+      - name: Build Static Git
         run: |
-          cd nano-8.2
-
+          cd git-2.47.1
           export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
           export PATH=$TOOLCHAIN/bin:$PATH
-
-          export CC=aarch64-linux-android34-clang
-          export CXX=aarch64-linux-android34-clang++
-          export AR=llvm-ar
-          export RANLIB=llvm-ranlib
-          export STRIP=llvm-strip
-
-          ./configure \
-            --host=aarch64-linux-android \
-            --prefix=/data/data/com.custom.terminal/files/usr \
-            --enable-utf8 \
-            --disable-nls \
-            --disable-speller \
-            NCURSESW_CFLAGS="-I$PWD/../ncurses-install/include -I$PWD/../ncurses-install/include/ncursesw" \
-            NCURSESW_LIBS="-L$PWD/../ncurses-install/lib -lncursesw" \
-            CFLAGS="-O2" \
-            LDFLAGS="-static -Wl,-z,max-page-size=16384"
-
-          make -j$(nproc)
+          make -j$(nproc) git \
+            CC=aarch64-linux-android34-clang \
+            AR=llvm-ar \
+            BASIC_CFLAGS="-O2 -static -fPIE -I$GITHUB_WORKSPACE/deps-install/include" \
+            BASIC_LDFLAGS="-static -Wl,-z,max-page-size=16384 -L$GITHUB_WORKSPACE/deps-install/lib" \
+            USE_LIBPCRE2=1 \
+            LIBPCRE2_PATH=$GITHUB_WORKSPACE/deps-install \
+            NO_REGEX=1 \
+            NO_ICONV=1 \
+            NO_GETTEXT=1 \
+            NO_TCLTK=1 \
+            NO_PYTHON=1 \
+            NO_PERL=1 \
+            NO_OPENSSL=1 \
+            NO_CURL=1 \
+            NO_SYS_POLL_H=1 \
+            PTHREAD_LIBS="" \
+            NEEDS_LIBICONV="" \
+            NEEDS_LIBINTL="" \
+            NEEDS_LIBGEN="" \
+            NEEDS_LIBRESOLV=""
 
       - name: Package binary and verify
         run: |
           export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
           export PATH=$TOOLCHAIN/bin:$PATH
-
           mkdir -p output
-          cp nano-8.2/src/nano output/
-
-          readelf -l output/nano | grep -q INTERP && exit 1 || true
-          readelf -l output/nano
-          llvm-strip output/nano
-
+          cp git-2.47.1/git output/
+          readelf -l output/git | grep -A1 "LOAD" | grep -q "0x4000" || (echo "ERROR: missing 16KB alignment" && exit 1)
+          readelf -l output/git | grep -q INTERP && (echo "ERROR: PT_INTERP found" && exit 1) || true
+          readelf -l output/git
+          llvm-strip output/git
           cd output
-          tar -czvf nano-arm64.tar.gz nano
+          tar -czvf git-arm64.tar.gz git
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: droidx-bionic-nano-arm64
-          path: output/nano-arm64.tar.gz
+          name: droidx-bionic-git-arm64
+          path: output/git-arm64.tar.gz
