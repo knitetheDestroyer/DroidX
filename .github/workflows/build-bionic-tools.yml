@@ -60,7 +60,8 @@ jobs:
           export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
           export PATH=$TOOLCHAIN/bin:$PATH
 
-          # Patch out sysinfo and sync_file_range from uname config for Android seccomp safety
+          # Patch out glibc-only libs and syscalls for Android Bionic seccomp safety
+          sed -i '/NEEDS_LIBRT/d' config.mak.uname
           sed -i '/HAVE_SYSINFO/d' config.mak.uname
           sed -i '/HAVE_SYNC_FILE_RANGE/d' config.mak.uname
 
@@ -88,6 +89,7 @@ jobs:
             NO_CURL=1 \
             NO_SYS_POLL_H=1 \
             PTHREAD_LIBS="" \
+            NEEDS_LIBRT="" \
             NEEDS_LIBICONV="" \
             NEEDS_LIBINTL="" \
             NEEDS_LIBGEN="" \
