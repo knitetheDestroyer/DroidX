@@ -59,13 +59,36 @@ jobs:
           cd git-2.47.1
           export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
           export PATH=$TOOLCHAIN/bin:$PATH
+
+          # Patch out sysinfo and sync_file_range from uname config for Android seccomp safety
+          sed -i '/HAVE_SYSINFO/d' config.mak.uname
+          sed -i '/HAVE_SYNC_FILE_RANGE/d' config.mak.uname
+
+          # Patch compatibility header for Android Bionic pthread cancellation omission
+          cat << 'HDR' >> git-compat-util.h
+
+#ifndef PTHREAD_CANCEL_DISABLE
+#define PTHREAD_CANCEL_DISABLE 0
+#endif
+#ifndef PTHREAD_CANCEL_ENABLE
+#define PTHREAD_CANCEL_ENABLE 1
+#endif
+#ifndef pthread_setcancelstate
+#define pthread_setcancelstate(s, o) (0)
+#endif
+HDR
+
+          # Build git binary
           make -j$(nproc) git \
             CC=aarch64-linux-android34-clang \
             AR=llvm-ar \
-            CFLAGS="-O2 -static -fPIE -I. -I$GITHUB_WORKSPACE/deps-install/include" \
+            CFLAGS="-O2 -static -fPIE -I. -I$GITHUB_WORKSPACE/deps-install/include -DNO_PTHREADS -D__ANDROID__" \
             LDFLAGS="-static -Wl,-z,max-page-size=16384 -L$GITHUB_WORKSPACE/deps-install/lib" \
             USE_LIBPCRE2=1 \
             LIBPCRE2_PATH=$GITHUB_WORKSPACE/deps-install \
+            NO_PTHREADS=1 \
+            NO_GECOS_IN_PWENT=1 \
+            NO_NSEC=1 \
             NO_REGEX=1 \
             NO_ICONV=1 \
             NO_GETTEXT=1 \
@@ -87,6 +110,7 @@ jobs:
           export PATH=$TOOLCHAIN/bin:$PATH
           mkdir -p output
           cp git-2.47.1/git output/
+          file output/git
           readelf -l output/git | grep -A1 "LOAD" | grep -q "0x4000" || (echo "ERROR: missing 16KB alignment" && exit 1)
           readelf -l output/git | grep -q INTERP && (echo "ERROR: PT_INTERP found" && exit 1) || true
           readelf -l output/git
